@@ -54,7 +54,7 @@ jobs:
           account = "${{ env.SNOWFLAKE_ACCOUNT }}"
           user = "${{ secrets.SNOWFLAKE_USER }}"
           password = "${{ secrets.SNOWFLAKE_PASSWORD }}"
-          role = "SYSADMIN"
+          role = "HCLS_DEPLOY_ROLE"
           warehouse = "COMPUTE_WH"
           EOF
 
