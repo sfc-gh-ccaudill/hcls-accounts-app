@@ -9,10 +9,14 @@ export interface Account {
   ID: number;
   NAME: string;
   INDUSTRY: string;
+  ACCOUNT_TYPE: string | null;
   DESCRIPTION: string | null;
   CREATED_AT: string;
   UPDATED_AT: string;
 }
+
+export const ACCOUNT_TYPES = ["Payer", "Provider", "HealthTech", "Life Sciences"] as const;
+export type AccountType = typeof ACCOUNT_TYPES[number];
 
 export interface Event {
   ID: number;
@@ -78,4 +82,17 @@ export interface UserActivity {
   EVENT_TYPE: string | null;
   USE_CASE_ID: number | null;
   USE_CASE_TITLE: string | null;
+}
+
+export interface ActionItem {
+  ID: number;
+  ACCOUNT_ID: number;
+  EVENT_ID: number | null;
+  DESCRIPTION: string;
+  DUE_DATE: string | null;
+  ASSIGNED_TO: string | null;
+  COMPLETED: boolean;
+  COMPLETED_BY: string | null;
+  COMPLETED_AT: string | null;
+  CREATED_AT: string;
 }

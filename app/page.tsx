@@ -19,7 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
-import { AccountSummary } from "@/lib/types";
+import { AccountSummary, ACCOUNT_TYPES } from "@/lib/types";
 
 function formatCurrency(value: number | null): string {
   if (value === null || value === undefined) return "-";
@@ -41,7 +41,7 @@ export default function HomePage() {
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [newAccount, setNewAccount] = useState({ name: "", description: "" });
+  const [newAccount, setNewAccount] = useState({ name: "", description: "", accountTypes: [] as string[] });
 
   const fetchAccounts = async () => {
     try {
@@ -71,9 +71,13 @@ export default function HomePage() {
       await fetch("/api/accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newAccount),
+        body: JSON.stringify({
+          name: newAccount.name,
+          description: newAccount.description,
+          account_type: newAccount.accountTypes.join(", "),
+        }),
       });
-      setNewAccount({ name: "", description: "" });
+      setNewAccount({ name: "", description: "", accountTypes: [] });
       setDialogOpen(false);
       fetchAccounts();
     } catch (error) {
@@ -111,6 +115,32 @@ export default function HomePage() {
                   />
                 </div>
                 <div className="space-y-2">
+                  <Label>Account Type</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {ACCOUNT_TYPES.map((type) => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => {
+                          setNewAccount(prev => ({
+                            ...prev,
+                            accountTypes: prev.accountTypes.includes(type)
+                              ? prev.accountTypes.filter(t => t !== type)
+                              : [...prev.accountTypes, type]
+                          }));
+                        }}
+                        className={`px-3 py-1.5 text-sm rounded-full border transition-all ${
+                          newAccount.accountTypes.includes(type)
+                            ? "bg-violet-600 text-white border-violet-600"
+                            : "bg-white text-gray-700 border-gray-300 hover:border-violet-400"
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="description">Description</Label>
                   <Textarea
                     id="description"
@@ -119,7 +149,7 @@ export default function HomePage() {
                     placeholder="Brief description of the account"
                   />
                 </div>
-                <Button onClick={handleCreateAccount} className="w-full">
+                <Button onClick={handleCreateAccount} className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700">
                   Create Account
                 </Button>
               </div>
@@ -187,7 +217,13 @@ export default function HomePage() {
                         <Building2 className="h-5 w-5 text-violet-600" />
                         {account.NAME}
                       </CardTitle>
-                      <Badge variant="secondary" className="bg-gradient-to-r from-violet-100 to-indigo-100 text-violet-700 border-0">{account.INDUSTRY}</Badge>
+                      {account.ACCOUNT_TYPE && (
+                        <div className="flex flex-wrap gap-1">
+                          {account.ACCOUNT_TYPE.split(", ").map((type) => (
+                            <Badge key={type} variant="secondary" className="bg-gradient-to-r from-violet-100 to-indigo-100 text-violet-700 border-0 text-xs">{type}</Badge>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     {account.DESCRIPTION && (
                       <p className="text-sm text-muted-foreground line-clamp-2">
