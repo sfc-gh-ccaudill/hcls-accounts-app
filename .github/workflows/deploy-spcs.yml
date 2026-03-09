@@ -42,7 +42,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Install Snowflake CLI
-        uses: Snowflake-Labs/snowflake-cli-action@v1
+        uses: Snowflake-Labs/snowflake-cli-action@v1.5
         with:
           default-config-file-path: .snowflake/config.toml
 
