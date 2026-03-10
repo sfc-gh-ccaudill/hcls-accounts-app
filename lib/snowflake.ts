@@ -83,7 +83,7 @@ function getConfig(): snowflake.ConnectionOptions {
         config.password = tomlConfig.password;
       }
 
-      return config as snowflake.ConnectionOptions;
+      return config as unknown as snowflake.ConnectionOptions;
     }
   }
 
