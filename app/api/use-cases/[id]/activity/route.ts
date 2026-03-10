@@ -56,3 +56,48 @@ export async function POST(
     return NextResponse.json({ error: "Failed to create activity" }, { status: 500 });
   }
 }
+
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const body = await request.json();
+    const { activity_id, description } = body;
+    
+    await query(`
+      UPDATE HCLS_ACCOUNTS.PUBLIC.USE_CASE_ACTIVITY 
+      SET DESCRIPTION = '${description.replace(/'/g, "''")}'
+      WHERE ID = ${activity_id}
+    `);
+    
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Error updating activity:", error);
+    return NextResponse.json({ error: "Failed to update activity" }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const activityId = searchParams.get("activity_id");
+    
+    if (!activityId) {
+      return NextResponse.json({ error: "activity_id is required" }, { status: 400 });
+    }
+    
+    await query(`
+      DELETE FROM HCLS_ACCOUNTS.PUBLIC.USE_CASE_ACTIVITY 
+      WHERE ID = ${activityId}
+    `);
+    
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting activity:", error);
+    return NextResponse.json({ error: "Failed to delete activity" }, { status: 500 });
+  }
+}

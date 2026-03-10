@@ -31,13 +31,11 @@ export async function GET(request: Request) {
     const eventsText = eventsResult[0]?.EVENTS_TEXT || 'No events recorded';
     const useCasesText = useCasesResult[0]?.USE_CASES_TEXT || 'No use cases';
 
-    const prompt = `Summarize the following account activity in 2-3 concise sentences. Focus on key themes, recent progress, and important opportunities.
+    const prompt = `You are an executive assistant. Summarize the following account activity in 2-3 concise sentences. Focus on key themes, recent progress, and important opportunities. Do not include any preamble or introduction - just provide the summary directly.
 
 Events: ${eventsText}
 
-Use Cases: ${useCasesText}
-
-Provide a brief executive summary:`;
+Use Cases: ${useCasesText}`;
 
     const summaryResult = await query<{SUMMARY: string}>(`
       SELECT SNOWFLAKE.CORTEX.COMPLETE('llama3.1-8b', '${prompt.replace(/'/g, "''")}') as SUMMARY

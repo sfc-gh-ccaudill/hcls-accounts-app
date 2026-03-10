@@ -12,13 +12,16 @@ interface TeamActivityRow {
   ACTIVITY_DESCRIPTION: string | null;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const weekOffset = parseInt(searchParams.get("weekOffset") || "0", 10);
+
     const activities = await query<TeamActivityRow>(`
-      WITH this_week AS (
+      WITH target_week AS (
         SELECT 
-          DATE_TRUNC('week', CURRENT_DATE()) as week_start,
-          DATEADD('day', 6, DATE_TRUNC('week', CURRENT_DATE())) as week_end
+          DATEADD('week', ${weekOffset}, DATE_TRUNC('week', CURRENT_DATE())) as week_start,
+          DATEADD('day', 6, DATEADD('week', ${weekOffset}, DATE_TRUNC('week', CURRENT_DATE()))) as week_end
       )
       SELECT 
         u.ID as USER_ID,
@@ -32,7 +35,7 @@ export async function GET() {
       FROM HCLS_ACCOUNTS.PUBLIC.USERS u
       JOIN HCLS_ACCOUNTS.PUBLIC.EVENTS e ON u.ID = e.USER_ID
       JOIN HCLS_ACCOUNTS.PUBLIC.ACCOUNTS a ON e.ACCOUNT_ID = a.ID
-      CROSS JOIN this_week tw
+      CROSS JOIN target_week tw
       WHERE e.EVENT_DATE BETWEEN tw.week_start AND tw.week_end
       
       UNION ALL
@@ -50,7 +53,7 @@ export async function GET() {
       JOIN HCLS_ACCOUNTS.PUBLIC.USE_CASE_ACTIVITY uca ON u.ID = uca.USER_ID
       JOIN HCLS_ACCOUNTS.PUBLIC.USE_CASES uc ON uca.USE_CASE_ID = uc.ID
       JOIN HCLS_ACCOUNTS.PUBLIC.ACCOUNTS a ON uc.ACCOUNT_ID = a.ID
-      CROSS JOIN this_week tw
+      CROSS JOIN target_week tw
       WHERE uca.CREATED_AT::DATE BETWEEN tw.week_start AND tw.week_end
       
       ORDER BY ACTIVITY_DATE DESC, USER_NAME

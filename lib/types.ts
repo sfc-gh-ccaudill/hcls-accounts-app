@@ -23,6 +23,7 @@ export interface Event {
   ID: number;
   ACCOUNT_ID: number;
   USER_ID: number | null;
+  USE_CASE_ID: number | null;
   TITLE: string;
   EVENT_TYPE: string;
   LOCATION_TYPE: string;
@@ -90,11 +91,13 @@ export interface ActionItem {
   ID: number;
   ACCOUNT_ID: number;
   EVENT_ID: number | null;
+  USE_CASE_ID: number | null;
   DESCRIPTION: string;
   DUE_DATE: string | null;
   ASSIGNED_TO: string | null;
   OWNER_ID: number | null;
   OWNER_NAME: string | null;
+  USE_CASE_TITLE: string | null;
   COMPLETED: boolean;
   COMPLETED_BY: string | null;
   COMPLETED_AT: string | null;

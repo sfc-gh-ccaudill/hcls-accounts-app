@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Calendar, User, Building2, Briefcase, Plus, Trash2, UserPlus, AlertCircle } from "lucide-react";
+import { Calendar, User, Building2, Briefcase, Plus, Trash2, UserPlus, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -80,11 +80,12 @@ export default function TeamActivityPage() {
   const [createdUser, setCreatedUser] = useState<NewUserResponse | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<UserType | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [weekOffset, setWeekOffset] = useState(0);
 
   const fetchData = async () => {
     try {
       const [activityRes, usersRes] = await Promise.all([
-        fetch("/api/team-activity"),
+        fetch(`/api/team-activity?weekOffset=${weekOffset}`),
         fetch("/api/users"),
       ]);
       const activityData = await activityRes.json();
@@ -102,7 +103,7 @@ export default function TeamActivityPage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [weekOffset]);
 
   const handleCreateUser = async () => {
     if (!newUserName.trim()) return;
@@ -165,7 +166,7 @@ export default function TeamActivityPage() {
   const allUsers = users.map((u) => u.NAME);
 
   const weekStart = new Date();
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay() + (weekOffset * 7));
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 6);
 
@@ -191,7 +192,32 @@ export default function TeamActivityPage() {
 
           <TabsContent value="activity" className="space-y-6">
             <div className="flex items-center justify-between">
-              <Badge variant="secondary">{weekRange}</Badge>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setWeekOffset(weekOffset - 1)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Badge variant="secondary" className="px-3 py-1">
+                  {weekOffset === 0 ? "This Week" : weekOffset === -1 ? "Last Week" : weekRange}
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setWeekOffset(weekOffset + 1)}
+                  disabled={weekOffset >= 0}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                {weekOffset !== 0 && (
+                  <Button variant="ghost" size="sm" onClick={() => setWeekOffset(0)}>
+                    Today
+                  </Button>
+                )}
+              </div>
+              <span className="text-sm text-muted-foreground">{weekRange}</span>
             </div>
 
             {loading ? (
@@ -225,7 +251,7 @@ export default function TeamActivityPage() {
                             <CardTitle className="text-lg">{userName}</CardTitle>
                             <p className="text-sm text-muted-foreground">
                               {userActivities.length} activit{userActivities.length === 1 ? "y" : "ies"}{" "}
-                              this week
+                              {weekOffset === 0 ? "this week" : ""}
                             </p>
                           </div>
                         </div>
@@ -234,7 +260,7 @@ export default function TeamActivityPage() {
                         {userActivities.length === 0 ? (
                           <div className="text-center py-6 text-muted-foreground text-sm">
                             <User className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                            No activity logged this week
+                            No activity logged {weekOffset === 0 ? "this week" : ""}
                           </div>
                         ) : (
                           <div className="space-y-3">
@@ -281,9 +307,9 @@ export default function TeamActivityPage() {
               <Card className="mt-6">
                 <CardContent className="py-12 text-center">
                   <Briefcase className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                  <h3 className="text-lg font-medium mb-2">No Team Activity This Week</h3>
+                  <h3 className="text-lg font-medium mb-2">No Team Activity {weekOffset === 0 ? "This Week" : ""}</h3>
                   <p className="text-muted-foreground">
-                    Events and use case updates logged this week will appear here.
+                    Events and use case updates logged {weekOffset === 0 ? "this week" : "during this period"} will appear here.
                   </p>
                 </CardContent>
               </Card>

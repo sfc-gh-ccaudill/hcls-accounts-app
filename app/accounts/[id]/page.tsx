@@ -43,7 +43,72 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { Account, Event, UseCase, User, ActionItem } from "@/lib/types";
 
-const EVENT_TYPES = ["Meeting", "Workshop", "Demo", "Call", "Training", "Review"];
+function NewActionItemButton({ onAdd, users, useCases }: { onAdd: (desc: string, due: string, owner: string, useCaseId: string) => void; users: User[]; useCases: UseCase[] }) {
+  const [open, setOpen] = useState(false);
+  const [desc, setDesc] = useState("");
+  const [due, setDue] = useState("");
+  const [owner, setOwner] = useState("");
+  const [useCaseId, setUseCaseId] = useState("");
+
+  const handleAdd = () => {
+    onAdd(desc, due, owner, useCaseId);
+    setDesc("");
+    setDue("");
+    setOwner("");
+    setUseCaseId("");
+    setOpen(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button size="sm" variant="outline" />}>
+        <Plus className="h-4 w-4 mr-1" />
+        Add
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add Action Item</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-4">
+          <div className="space-y-2">
+            <Label>Description *</Label>
+            <Input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="What needs to be done?" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Due Date</Label>
+              <Input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Owner</Label>
+              <Select value={owner} onValueChange={(v) => setOwner(v || "")}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  {users.map((u) => (<SelectItem key={u.ID} value={String(u.ID)}>{u.NAME}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Related Use Case</Label>
+            <Select value={useCaseId} onValueChange={(v) => setUseCaseId(v || "")}>
+              <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">None</SelectItem>
+                {useCases.map((uc) => (<SelectItem key={uc.ID} value={String(uc.ID)}>{uc.TITLE}</SelectItem>))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button onClick={handleAdd} disabled={!desc.trim()} className="w-full">
+            Add Action Item
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+const EVENT_TYPES = ["Meeting", "Workshop", "Demo", "Call", "Training", "Review", "Conversation", "Document", "Other"];
 const LOCATION_TYPES = ["Virtual", "On-site"];
 const USE_CASE_STAGES = [
   "0 - Not in Pursuit",
@@ -94,6 +159,7 @@ export default function AccountDetailPage({
   const [events, setEvents] = useState<(Event & { USER_NAME: string })[]>([]);
   const [useCases, setUseCases] = useState<(UseCase & { OWNER_NAME: string })[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [aiSummary, setAiSummary] = useState<string>("");
   const [summaryLoading, setSummaryLoading] = useState(true);
@@ -104,6 +170,10 @@ export default function AccountDetailPage({
   const [eventDetailDialog, setEventDetailDialog] = useState<(Event & { USER_NAME: string }) | null>(null);
   const [editingEvent, setEditingEvent] = useState<(Event & { USER_NAME: string }) | null>(null);
   const [editingUseCase, setEditingUseCase] = useState<(UseCase & { OWNER_NAME: string }) | null>(null);
+  const [useCaseActivities, setUseCaseActivities] = useState<{ID: number; DESCRIPTION: string; CREATED_AT: string; USER_NAME: string}[]>([]);
+  const [newActivity, setNewActivity] = useState("");
+  const [editingActivityId, setEditingActivityId] = useState<number | null>(null);
+  const [editingActivityText, setEditingActivityText] = useState("");
 
   const [newEvent, setNewEvent] = useState({
     title: "",
@@ -114,10 +184,11 @@ export default function AccountDetailPage({
     attendees: "",
     objective: "",
     notes: "",
-    user_id: "",
+    use_case_id: "",
   });
 
-  const [followUps, setFollowUps] = useState<{description: string; due_date: string; assigned_to: string; owner_id: string}[]>([]);
+  const [followUps, setFollowUps] = useState<{description: string; due_date: string; assigned_to: string; owner_id: string; use_case_id: string}[]>([]);
+  const [editFollowUps, setEditFollowUps] = useState<{description: string; due_date: string; owner_id: string; use_case_id: string}[]>([]);
 
   const [newUseCase, setNewUseCase] = useState({
     title: "",
@@ -134,20 +205,25 @@ export default function AccountDetailPage({
 
   const fetchData = async () => {
     try {
-      const [accountRes, usersRes, actionItemsRes] = await Promise.all([
+      const [accountRes, usersRes, actionItemsRes, currentUserRes] = await Promise.all([
         fetch(`/api/accounts/${id}`),
         fetch("/api/users"),
         fetch(`/api/action-items?account_id=${id}`),
+        fetch("/api/current-user"),
       ]);
       const accountData = await accountRes.json();
       const usersData = await usersRes.json();
       const actionItemsData = await actionItemsRes.json();
+      const currentUserData = await currentUserRes.json();
 
       setAccount(accountData.account);
       setEvents(accountData.events);
       setUseCases(accountData.useCases);
       setUsers(usersData);
       setActionItems(Array.isArray(actionItemsData) ? actionItemsData : []);
+      if (currentUserData.user?.ID) {
+        setCurrentUserId(currentUserData.user.ID);
+      }
     } catch (error) {
       console.error("Failed to fetch data:", error);
     } finally {
@@ -181,13 +257,14 @@ export default function AccountDetailPage({
         body: JSON.stringify({
           ...newEvent,
           account_id: id,
-          user_id: newEvent.user_id || null,
+          user_id: currentUserId,
+          use_case_id: newEvent.use_case_id || null,
           follow_ups: followUps.filter(f => f.description.trim()),
         }),
       });
       setNewEvent({
         title: "", event_type: "", location_type: "", event_date: "",
-        event_time: "", attendees: "", objective: "", notes: "", user_id: "",
+        event_time: "", attendees: "", objective: "", notes: "", use_case_id: "",
       });
       setFollowUps([]);
       setEventDialogOpen(false);
@@ -206,6 +283,7 @@ export default function AccountDetailPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: editingEvent.ID,
+          use_case_id: editingEvent.USE_CASE_ID,
           title: editingEvent.TITLE,
           event_type: editingEvent.EVENT_TYPE,
           location_type: editingEvent.LOCATION_TYPE,
@@ -216,6 +294,7 @@ export default function AccountDetailPage({
           notes: editingEvent.NOTES,
         }),
       });
+      await handleSaveEditFollowUps(editingEvent.ID);
       setEditingEvent(null);
       fetchData();
     } catch (error) {
@@ -300,10 +379,77 @@ export default function AccountDetailPage({
         }),
       });
       setEditingUseCase(null);
+      setUseCaseActivities([]);
       fetchData();
     } catch (error) {
       console.error("Failed to update use case:", error);
     }
+  };
+
+  const fetchUseCaseActivities = async (useCaseId: number) => {
+    try {
+      const res = await fetch(`/api/use-cases/${useCaseId}/activity`);
+      const data = await res.json();
+      setUseCaseActivities(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Failed to fetch use case activities:", error);
+      setUseCaseActivities([]);
+    }
+  };
+
+  const handleAddActivity = async () => {
+    if (!editingUseCase || !newActivity.trim()) return;
+    try {
+      await fetch(`/api/use-cases/${editingUseCase.ID}/activity`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: currentUserId,
+          activity_type: "Salesforce Comment",
+          description: newActivity,
+        }),
+      });
+      setNewActivity("");
+      fetchUseCaseActivities(editingUseCase.ID);
+    } catch (error) {
+      console.error("Failed to add activity:", error);
+    }
+  };
+
+  const handleUpdateActivity = async () => {
+    if (!editingUseCase || !editingActivityId || !editingActivityText.trim()) return;
+    try {
+      await fetch(`/api/use-cases/${editingUseCase.ID}/activity`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          activity_id: editingActivityId,
+          description: editingActivityText,
+        }),
+      });
+      setEditingActivityId(null);
+      setEditingActivityText("");
+      fetchUseCaseActivities(editingUseCase.ID);
+    } catch (error) {
+      console.error("Failed to update activity:", error);
+    }
+  };
+
+  const handleDeleteActivity = async (activityId: number) => {
+    if (!editingUseCase || !confirm("Delete this activity note?")) return;
+    try {
+      await fetch(`/api/use-cases/${editingUseCase.ID}/activity?activity_id=${activityId}`, {
+        method: "DELETE",
+      });
+      fetchUseCaseActivities(editingUseCase.ID);
+    } catch (error) {
+      console.error("Failed to delete activity:", error);
+    }
+  };
+
+  const openEditUseCase = (uc: UseCase & { OWNER_NAME: string }) => {
+    setEditingUseCase(uc);
+    fetchUseCaseActivities(uc.ID);
   };
 
   const handleDeleteUseCase = async (useCaseId: number) => {
@@ -319,7 +465,7 @@ export default function AccountDetailPage({
   };
 
   const addFollowUp = () => {
-    setFollowUps([...followUps, { description: "", due_date: "", assigned_to: "", owner_id: "" }]);
+    setFollowUps([...followUps, { description: "", due_date: "", assigned_to: "", owner_id: "", use_case_id: "" }]);
   };
 
   const updateFollowUp = (index: number, field: string, value: string) => {
@@ -332,7 +478,57 @@ export default function AccountDetailPage({
     setFollowUps(followUps.filter((_, i) => i !== index));
   };
 
-  const openActionItems = actionItems.filter(item => !item.COMPLETED);
+  const addEditFollowUp = () => {
+    setEditFollowUps([...editFollowUps, { description: "", due_date: "", owner_id: "", use_case_id: "" }]);
+  };
+
+  const updateEditFollowUp = (index: number, field: string, value: string) => {
+    const updated = [...editFollowUps];
+    updated[index] = { ...updated[index], [field]: value };
+    setEditFollowUps(updated);
+  };
+
+  const removeEditFollowUp = (index: number) => {
+    setEditFollowUps(editFollowUps.filter((_, i) => i !== index));
+  };
+
+  const handleSaveEditFollowUps = async (eventId: number) => {
+    for (const followUp of editFollowUps) {
+      if (followUp.description?.trim()) {
+        await fetch("/api/action-items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            account_id: id,
+            event_id: eventId,
+            use_case_id: followUp.use_case_id || null,
+            description: followUp.description,
+            due_date: followUp.due_date || null,
+            owner_id: followUp.owner_id || null,
+          }),
+        });
+      }
+    }
+    setEditFollowUps([]);
+  };
+
+  const handleAddStandaloneActionItem = async (description: string, dueDate: string, ownerId: string, useCaseId: string) => {
+    if (!description.trim()) return;
+    await fetch("/api/action-items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        account_id: id,
+        event_id: null,
+        use_case_id: useCaseId || null,
+        description,
+        due_date: dueDate || null,
+        owner_id: ownerId || null,
+      }),
+    });
+    fetchData();
+  };
+
   const totalValue = useCases?.reduce((sum, uc) => sum + (uc.ESTIMATED_VALUE || 0), 0) || 0;
 
   if (loading) {
@@ -399,58 +595,65 @@ export default function AccountDetailPage({
             </CardContent>
           </Card>
 
-          <Card className="border-0 shadow-lg bg-gradient-to-br from-white to-emerald-50/30">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Quick Stats</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Events</span>
-                <span className="font-semibold">{events.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Use Cases</span>
-                <span className="font-semibold">{useCases.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Pipeline Value</span>
-                <span className="font-semibold text-emerald-600">{formatCurrency(totalValue)}</span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+          <div className="space-y-6">
+            <Card className="border-0 shadow-lg bg-gradient-to-br from-white to-emerald-50/30">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Quick Stats</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Events</span>
+                  <span className="font-semibold">{events.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Use Cases</span>
+                  <span className="font-semibold">{useCases.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Pipeline Value</span>
+                  <span className="font-semibold text-emerald-600">{formatCurrency(totalValue)}</span>
+                </div>
+              </CardContent>
+            </Card>
 
-        {openActionItems.length > 0 && (
-          <Card className="border-0 shadow-lg bg-gradient-to-br from-white to-amber-50/30">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <Circle className="h-4 w-4 text-amber-500" />
-                Outstanding Action Items ({openActionItems.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {openActionItems.map((item) => (
-                  <div key={item.ID} className="flex items-center gap-3 p-2 rounded-lg hover:bg-amber-50 transition-colors">
-                    <button
-                      onClick={() => handleToggleActionItem(item)}
-                      className="text-amber-500 hover:text-emerald-500 transition-colors"
-                    >
-                      <Circle className="h-5 w-5" />
-                    </button>
-                    <div className="flex-1">
-                      <p className="text-sm">{item.DESCRIPTION}</p>
-                      <div className="flex gap-3 text-xs text-muted-foreground">
-                        {item.DUE_DATE && <span>Due: {formatDate(item.DUE_DATE)}</span>}
-                        {item.OWNER_NAME && <span>Owner: {item.OWNER_NAME}</span>}
+            <Card className="border-0 shadow-lg bg-gradient-to-br from-white to-amber-50/30">
+              <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-amber-500" />
+                  Action Items ({actionItems.length})
+                </CardTitle>
+                <NewActionItemButton onAdd={handleAddStandaloneActionItem} users={users} useCases={useCases} />
+              </CardHeader>
+              <CardContent className="max-h-[300px] overflow-y-auto">
+                {actionItems.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-4">No action items yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {actionItems.map((item) => (
+                      <div key={item.ID} className="flex items-center gap-3 p-2 rounded-lg hover:bg-amber-50 transition-colors">
+                        <button
+                          onClick={() => handleToggleActionItem(item)}
+                          className={item.COMPLETED ? "text-emerald-500" : "text-amber-500 hover:text-emerald-500 transition-colors"}
+                        >
+                          {item.COMPLETED ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm ${item.COMPLETED ? "line-through text-muted-foreground" : ""}`}>{item.DESCRIPTION}</p>
+                          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                            {item.DUE_DATE && <span>Due: {formatDate(item.DUE_DATE)}</span>}
+                            {item.OWNER_NAME && <span>Owner: {item.OWNER_NAME}</span>}
+                            {item.EVENT_ID && <span className="text-violet-500">From event</span>}
+                            {item.USE_CASE_TITLE && <span className="text-emerald-500">{item.USE_CASE_TITLE}</span>}
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
 
         {account.DESCRIPTION && (
           <p className="text-muted-foreground">{account.DESCRIPTION}</p>
@@ -468,7 +671,7 @@ export default function AccountDetailPage({
                   <Plus className="h-4 w-4 mr-1" />
                   Log Event
                 </DialogTrigger>
-                <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Log New Event</DialogTitle>
                   </DialogHeader>
@@ -508,14 +711,15 @@ export default function AccountDetailPage({
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label>Logged By</Label>
-                      <Select value={newEvent.user_id} onValueChange={(v) => setNewEvent({ ...newEvent, user_id: v as string })}>
-                        <SelectTrigger><SelectValue placeholder="Select team member" /></SelectTrigger>
-                        <SelectContent>
-                          {users.map((user) => (<SelectItem key={user.ID} value={String(user.ID)}>{user.NAME}</SelectItem>))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                        <Label>Related Use Case</Label>
+                        <Select value={newEvent.use_case_id} onValueChange={(v) => setNewEvent({ ...newEvent, use_case_id: v as string })}>
+                          <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">None</SelectItem>
+                            {useCases.map((uc) => (<SelectItem key={uc.ID} value={String(uc.ID)}>{uc.TITLE}</SelectItem>))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     <div className="space-y-2">
                       <Label htmlFor="attendees">Attendees</Label>
                       <Input id="attendees" value={newEvent.attendees} onChange={(e) => setNewEvent({ ...newEvent, attendees: e.target.value })} placeholder="e.g., John Smith, Jane Doe" />
@@ -541,12 +745,19 @@ export default function AccountDetailPage({
                             </button>
                           </div>
                           <Input placeholder="Description" value={followUp.description} onChange={(e) => updateFollowUp(index, "description", e.target.value)} />
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-3 gap-2">
                             <Input type="date" placeholder="Due date" value={followUp.due_date} onChange={(e) => updateFollowUp(index, "due_date", e.target.value)} />
                             <Select value={followUp.owner_id} onValueChange={(v) => updateFollowUp(index, "owner_id", v || "")}>
                               <SelectTrigger><SelectValue placeholder="Owner" /></SelectTrigger>
                               <SelectContent>
                                 {users.map((user) => (<SelectItem key={user.ID} value={String(user.ID)}>{user.NAME}</SelectItem>))}
+                              </SelectContent>
+                            </Select>
+                            <Select value={followUp.use_case_id} onValueChange={(v) => updateFollowUp(index, "use_case_id", v || "")}>
+                              <SelectTrigger><SelectValue placeholder="Use Case" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="">None</SelectItem>
+                                {useCases.map((uc) => (<SelectItem key={uc.ID} value={String(uc.ID)}>{uc.TITLE}</SelectItem>))}
                               </SelectContent>
                             </Select>
                           </div>
@@ -606,7 +817,7 @@ export default function AccountDetailPage({
                   <Plus className="h-4 w-4 mr-1" />
                   Add Use Case
                 </DialogTrigger>
-                <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Add New Use Case</DialogTitle>
                   </DialogHeader>
@@ -685,7 +896,7 @@ export default function AccountDetailPage({
                   {useCases.map((uc) => (
                     <div 
                       key={uc.ID} 
-                      onClick={() => setEditingUseCase(uc)}
+                      onClick={() => openEditUseCase(uc)}
                       className="p-3 rounded-lg border hover:bg-emerald-50 cursor-pointer transition-colors"
                     >
                       <div className="flex items-start justify-between">
@@ -776,6 +987,12 @@ export default function AccountDetailPage({
                   <p className="font-medium">{eventDetailDialog.USER_NAME}</p>
                 </div>
               )}
+              {eventDetailDialog.USE_CASE_ID && (
+                <div className="text-sm">
+                  <p className="text-muted-foreground">Related Use Case</p>
+                  <p className="font-medium">{useCases.find(uc => uc.ID === eventDetailDialog.USE_CASE_ID)?.TITLE || "Unknown"}</p>
+                </div>
+              )}
               {eventDetailDialog.ATTENDEES && (
                 <div className="text-sm">
                   <p className="text-muted-foreground">Attendees</p>
@@ -815,7 +1032,7 @@ export default function AccountDetailPage({
       </Dialog>
 
       <Dialog open={!!editingEvent} onOpenChange={() => setEditingEvent(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Event</DialogTitle>
           </DialogHeader>
@@ -860,9 +1077,78 @@ export default function AccountDetailPage({
                 <Input value={editingEvent.ATTENDEES || ""} onChange={(e) => setEditingEvent({ ...editingEvent, ATTENDEES: e.target.value })} />
               </div>
               <div className="space-y-2">
+                <Label>Related Use Case</Label>
+                <Select 
+                  value={editingEvent.USE_CASE_ID ? String(editingEvent.USE_CASE_ID) : ""} 
+                  onValueChange={(v) => setEditingEvent({ ...editingEvent, USE_CASE_ID: v ? parseInt(v) : null })}
+                >
+                  <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">None</SelectItem>
+                    {useCases.map((uc) => (<SelectItem key={uc.ID} value={String(uc.ID)}>{uc.TITLE}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label>Objective / Notes</Label>
                 <Textarea value={editingEvent.OBJECTIVE || ""} onChange={(e) => setEditingEvent({ ...editingEvent, OBJECTIVE: e.target.value })} />
               </div>
+
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <Label className="text-base font-semibold">Existing Follow-ups</Label>
+                </div>
+                {actionItems.filter(a => a.EVENT_ID === editingEvent.ID).length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No follow-ups for this event.</p>
+                ) : (
+                  <div className="space-y-2 mb-4">
+                    {actionItems.filter(a => a.EVENT_ID === editingEvent.ID).map((item) => (
+                      <div key={item.ID} className="flex items-center gap-2 text-sm p-2 bg-gray-50 rounded">
+                        <button onClick={() => handleToggleActionItem(item)} className={item.COMPLETED ? "text-emerald-500" : "text-gray-400"}>
+                          {item.COMPLETED ? <CheckCircle2 className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
+                        </button>
+                        <span className={item.COMPLETED ? "line-through text-muted-foreground flex-1" : "flex-1"}>{item.DESCRIPTION}</span>
+                        {item.DUE_DATE && <span className="text-xs text-muted-foreground">{formatDate(item.DUE_DATE)}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between mb-3">
+                  <Label className="text-base font-semibold">Add New Follow-ups</Label>
+                  <Button type="button" variant="outline" size="sm" onClick={addEditFollowUp}>
+                    <Plus className="h-3 w-3 mr-1" /> Add
+                  </Button>
+                </div>
+                {editFollowUps.map((followUp, index) => (
+                  <div key={index} className="p-3 bg-gray-50 rounded-lg mb-2 space-y-2">
+                    <div className="flex justify-between">
+                      <Label className="text-xs">New Action Item {index + 1}</Label>
+                      <button onClick={() => removeEditFollowUp(index)} className="text-gray-400 hover:text-red-500">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <Input placeholder="Description" value={followUp.description} onChange={(e) => updateEditFollowUp(index, "description", e.target.value)} />
+                    <div className="grid grid-cols-3 gap-2">
+                      <Input type="date" placeholder="Due date" value={followUp.due_date} onChange={(e) => updateEditFollowUp(index, "due_date", e.target.value)} />
+                      <Select value={followUp.owner_id} onValueChange={(v) => updateEditFollowUp(index, "owner_id", v || "")}>
+                        <SelectTrigger><SelectValue placeholder="Owner" /></SelectTrigger>
+                        <SelectContent>
+                          {users.map((user) => (<SelectItem key={user.ID} value={String(user.ID)}>{user.NAME}</SelectItem>))}
+                        </SelectContent>
+                      </Select>
+                      <Select value={followUp.use_case_id} onValueChange={(v) => updateEditFollowUp(index, "use_case_id", v || "")}>
+                        <SelectTrigger><SelectValue placeholder="Use Case" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">None</SelectItem>
+                          {useCases.map((uc) => (<SelectItem key={uc.ID} value={String(uc.ID)}>{uc.TITLE}</SelectItem>))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
               <Button onClick={handleUpdateEvent} className="w-full bg-gradient-to-r from-violet-600 to-indigo-600">
                 Save Changes
               </Button>
@@ -872,7 +1158,7 @@ export default function AccountDetailPage({
       </Dialog>
 
       <Dialog open={!!editingUseCase} onOpenChange={() => setEditingUseCase(null)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between pr-8">
               Edit Use Case
@@ -986,6 +1272,63 @@ export default function AccountDetailPage({
                   placeholder="https://..." 
                 />
               </div>
+
+              <div className="border-t pt-4">
+                <Label className="text-base font-semibold">Use Case Activity</Label>
+                <p className="text-xs text-muted-foreground mb-3">Capture Salesforce comments or other updates</p>
+                <div className="flex gap-2 mb-4">
+                  <Textarea 
+                    value={newActivity} 
+                    onChange={(e) => setNewActivity(e.target.value)} 
+                    placeholder="Paste Salesforce comment or add a note..."
+                    className="flex-1"
+                    rows={2}
+                  />
+                  <Button type="button" onClick={handleAddActivity} disabled={!newActivity.trim()} className="self-end">
+                    Add
+                  </Button>
+                </div>
+                {useCaseActivities.length > 0 && (
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                    {useCaseActivities.map((activity) => (
+                      <div key={activity.ID} className="p-2 bg-gray-50 rounded text-sm">
+                        {editingActivityId === activity.ID ? (
+                          <div className="space-y-2">
+                            <Textarea
+                              value={editingActivityText}
+                              onChange={(e) => setEditingActivityText(e.target.value)}
+                              rows={2}
+                            />
+                            <div className="flex gap-2">
+                              <Button size="sm" onClick={handleUpdateActivity}>Save</Button>
+                              <Button size="sm" variant="outline" onClick={() => { setEditingActivityId(null); setEditingActivityText(""); }}>Cancel</Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex justify-between items-start gap-2">
+                              <p className="flex-1">{activity.DESCRIPTION}</p>
+                              <div className="flex gap-1 shrink-0">
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => { setEditingActivityId(activity.ID); setEditingActivityText(activity.DESCRIPTION); }}>
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600 hover:text-red-700" onClick={() => handleDeleteActivity(activity.ID)}>
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {activity.USER_NAME && `${activity.USER_NAME} • `}
+                              {formatDate(activity.CREATED_AT)}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <Button onClick={handleUpdateUseCase} className="w-full bg-gradient-to-r from-emerald-600 to-teal-600">
                 Save Changes
               </Button>
