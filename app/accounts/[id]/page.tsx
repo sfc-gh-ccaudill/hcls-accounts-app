@@ -46,13 +46,15 @@ import { Account, Event, UseCase, User, ActionItem } from "@/lib/types";
 const EVENT_TYPES = ["Meeting", "Workshop", "Demo", "Call", "Training", "Review"];
 const LOCATION_TYPES = ["Virtual", "On-site"];
 const USE_CASE_STAGES = [
-  "Discovery",
-  "Qualification",
-  "POC",
-  "Proposal",
-  "Negotiation",
-  "Closed Won",
-  "Closed Lost",
+  "0 - Not in Pursuit",
+  "1 - Discovery",
+  "2 - Scoping",
+  "3 - Technical/Business Validation",
+  "4 - Use Case Won",
+  "5 - Implementation In Progress",
+  "6 - Implementation Complete",
+  "7 - Deployed",
+  "8 - Use Case Lost",
 ];
 
 function formatDate(dateStr: string | null): string {
@@ -101,6 +103,7 @@ export default function AccountDetailPage({
   const [useCaseDialogOpen, setUseCaseDialogOpen] = useState(false);
   const [eventDetailDialog, setEventDetailDialog] = useState<(Event & { USER_NAME: string }) | null>(null);
   const [editingEvent, setEditingEvent] = useState<(Event & { USER_NAME: string }) | null>(null);
+  const [editingUseCase, setEditingUseCase] = useState<(UseCase & { OWNER_NAME: string }) | null>(null);
 
   const [newEvent, setNewEvent] = useState({
     title: "",
@@ -118,6 +121,7 @@ export default function AccountDetailPage({
 
   const [newUseCase, setNewUseCase] = useState({
     title: "",
+    use_case_id: "",
     priority: "",
     estimated_value: "",
     stage: "",
@@ -263,7 +267,7 @@ export default function AccountDetailPage({
         }),
       });
       setNewUseCase({
-        title: "", priority: "", estimated_value: "", stage: "",
+        title: "", use_case_id: "", priority: "", estimated_value: "", stage: "",
         account_executive: "", solution_engineer: "", owner_id: "",
         description: "", salesforce_link: "",
       });
@@ -272,6 +276,45 @@ export default function AccountDetailPage({
       fetchAiSummary();
     } catch (error) {
       console.error("Failed to create use case:", error);
+    }
+  };
+
+  const handleUpdateUseCase = async () => {
+    if (!editingUseCase) return;
+    try {
+      await fetch("/api/use-cases", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingUseCase.ID,
+          use_case_id: editingUseCase.USE_CASE_ID,
+          title: editingUseCase.TITLE,
+          priority: editingUseCase.PRIORITY,
+          estimated_value: editingUseCase.ESTIMATED_VALUE,
+          stage: editingUseCase.STAGE,
+          account_executive: editingUseCase.ACCOUNT_EXECUTIVE,
+          solution_engineer: editingUseCase.SOLUTION_ENGINEER,
+          owner_id: editingUseCase.OWNER_ID,
+          description: editingUseCase.DESCRIPTION,
+          salesforce_link: editingUseCase.SALESFORCE_LINK,
+        }),
+      });
+      setEditingUseCase(null);
+      fetchData();
+    } catch (error) {
+      console.error("Failed to update use case:", error);
+    }
+  };
+
+  const handleDeleteUseCase = async (useCaseId: number) => {
+    if (!confirm("Delete this use case and all its activity?")) return;
+    try {
+      await fetch(`/api/use-cases?id=${useCaseId}`, { method: "DELETE" });
+      setEditingUseCase(null);
+      fetchData();
+      fetchAiSummary();
+    } catch (error) {
+      console.error("Failed to delete use case:", error);
     }
   };
 
@@ -572,6 +615,10 @@ export default function AccountDetailPage({
                       <Label htmlFor="uc-title">Title *</Label>
                       <Input id="uc-title" value={newUseCase.title} onChange={(e) => setNewUseCase({ ...newUseCase, title: e.target.value })} placeholder="e.g., Data Lakehouse Migration" />
                     </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="uc-sfid">Salesforce Use Case ID</Label>
+                      <Input id="uc-sfid" value={newUseCase.use_case_id} onChange={(e) => setNewUseCase({ ...newUseCase, use_case_id: e.target.value })} placeholder="e.g., UC-00123456" />
+                    </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Priority (1-5)</Label>
@@ -636,14 +683,29 @@ export default function AccountDetailPage({
               ) : (
                 <div className="space-y-2">
                   {useCases.map((uc) => (
-                    <div key={uc.ID} className="p-3 rounded-lg border hover:bg-emerald-50 transition-colors">
+                    <div 
+                      key={uc.ID} 
+                      onClick={() => setEditingUseCase(uc)}
+                      className="p-3 rounded-lg border hover:bg-emerald-50 cursor-pointer transition-colors"
+                    >
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-2">
                           <div className={`w-2 h-2 rounded-full ${getPriorityColor(uc.PRIORITY)}`} />
-                          <h3 className="font-medium">{uc.TITLE}</h3>
+                          <div>
+                            <h3 className="font-medium">{uc.TITLE}</h3>
+                            {uc.USE_CASE_ID && (
+                              <span className="text-xs text-muted-foreground">{uc.USE_CASE_ID}</span>
+                            )}
+                          </div>
                         </div>
                         {uc.SALESFORCE_LINK && (
-                          <a href={uc.SALESFORCE_LINK} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800">
+                          <a 
+                            href={uc.SALESFORCE_LINK} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-blue-600 hover:text-blue-800"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <ExternalLink className="h-4 w-4" />
                           </a>
                         )}
@@ -802,6 +864,129 @@ export default function AccountDetailPage({
                 <Textarea value={editingEvent.OBJECTIVE || ""} onChange={(e) => setEditingEvent({ ...editingEvent, OBJECTIVE: e.target.value })} />
               </div>
               <Button onClick={handleUpdateEvent} className="w-full bg-gradient-to-r from-violet-600 to-indigo-600">
+                Save Changes
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editingUseCase} onOpenChange={() => setEditingUseCase(null)}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between pr-8">
+              Edit Use Case
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-red-500 hover:text-red-700" 
+                onClick={() => editingUseCase && handleDeleteUseCase(editingUseCase.ID)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+          {editingUseCase && (
+            <div className="space-y-4 pt-4">
+              <div className="space-y-2">
+                <Label>Title *</Label>
+                <Input 
+                  value={editingUseCase.TITLE} 
+                  onChange={(e) => setEditingUseCase({ ...editingUseCase, TITLE: e.target.value })} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Salesforce Use Case ID</Label>
+                <Input 
+                  value={editingUseCase.USE_CASE_ID || ""} 
+                  onChange={(e) => setEditingUseCase({ ...editingUseCase, USE_CASE_ID: e.target.value })} 
+                  placeholder="e.g., UC-00123456"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Priority (1-5)</Label>
+                  <Select 
+                    value={editingUseCase.PRIORITY ? String(editingUseCase.PRIORITY) : ""} 
+                    onValueChange={(v) => setEditingUseCase({ ...editingUseCase, PRIORITY: v ? parseInt(v) : null })}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5].map((p) => (
+                        <SelectItem key={p} value={String(p)}>{p} - {p === 1 ? "Highest" : p === 5 ? "Lowest" : ""}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Estimated Value ($)</Label>
+                  <Input 
+                    type="number" 
+                    value={editingUseCase.ESTIMATED_VALUE || ""} 
+                    onChange={(e) => setEditingUseCase({ ...editingUseCase, ESTIMATED_VALUE: e.target.value ? parseFloat(e.target.value) : null })} 
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Stage</Label>
+                <Select 
+                  value={editingUseCase.STAGE || ""} 
+                  onValueChange={(v) => setEditingUseCase({ ...editingUseCase, STAGE: v || null })}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select stage" /></SelectTrigger>
+                  <SelectContent>
+                    {USE_CASE_STAGES.map((stage) => (
+                      <SelectItem key={stage} value={stage}>{stage}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Account Executive</Label>
+                  <Input 
+                    value={editingUseCase.ACCOUNT_EXECUTIVE || ""} 
+                    onChange={(e) => setEditingUseCase({ ...editingUseCase, ACCOUNT_EXECUTIVE: e.target.value })} 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Solution Engineer</Label>
+                  <Input 
+                    value={editingUseCase.SOLUTION_ENGINEER || ""} 
+                    onChange={(e) => setEditingUseCase({ ...editingUseCase, SOLUTION_ENGINEER: e.target.value })} 
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Owner</Label>
+                <Select 
+                  value={editingUseCase.OWNER_ID ? String(editingUseCase.OWNER_ID) : ""} 
+                  onValueChange={(v) => setEditingUseCase({ ...editingUseCase, OWNER_ID: v ? parseInt(v) : null })}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select owner" /></SelectTrigger>
+                  <SelectContent>
+                    {users.map((user) => (
+                      <SelectItem key={user.ID} value={String(user.ID)}>{user.NAME}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Description</Label>
+                <Textarea 
+                  value={editingUseCase.DESCRIPTION || ""} 
+                  onChange={(e) => setEditingUseCase({ ...editingUseCase, DESCRIPTION: e.target.value })} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Salesforce Link</Label>
+                <Input 
+                  value={editingUseCase.SALESFORCE_LINK || ""} 
+                  onChange={(e) => setEditingUseCase({ ...editingUseCase, SALESFORCE_LINK: e.target.value })} 
+                  placeholder="https://..." 
+                />
+              </div>
+              <Button onClick={handleUpdateUseCase} className="w-full bg-gradient-to-r from-emerald-600 to-teal-600">
                 Save Changes
               </Button>
             </div>

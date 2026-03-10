@@ -37,6 +37,7 @@ export interface Event {
 export interface UseCase {
   ID: number;
   ACCOUNT_ID: number;
+  USE_CASE_ID: string | null;
   TITLE: string;
   PRIORITY: number | null;
   ESTIMATED_VALUE: number | null;
