@@ -2,6 +2,7 @@ export interface User {
   ID: number;
   NAME: string;
   EMAIL: string | null;
+  SNOWFLAKE_USER: string | null;
   CREATED_AT: string;
 }
 
@@ -91,6 +92,8 @@ export interface ActionItem {
   DESCRIPTION: string;
   DUE_DATE: string | null;
   ASSIGNED_TO: string | null;
+  OWNER_ID: number | null;
+  OWNER_NAME: string | null;
   COMPLETED: boolean;
   COMPLETED_BY: string | null;
   COMPLETED_AT: string | null;

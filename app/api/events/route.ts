@@ -34,13 +34,14 @@ export async function POST(request: Request) {
       for (const followUp of follow_ups) {
         if (followUp.description?.trim()) {
           await query(`
-            INSERT INTO HCLS_ACCOUNTS.PUBLIC.ACTION_ITEMS (ACCOUNT_ID, EVENT_ID, DESCRIPTION, DUE_DATE, ASSIGNED_TO)
+            INSERT INTO HCLS_ACCOUNTS.PUBLIC.ACTION_ITEMS (ACCOUNT_ID, EVENT_ID, DESCRIPTION, DUE_DATE, ASSIGNED_TO, OWNER_ID)
             VALUES (
               ${account_id},
               ${eventId},
               '${followUp.description.replace(/'/g, "''")}',
               ${followUp.due_date ? `'${followUp.due_date}'` : 'NULL'},
-              ${followUp.assigned_to ? `'${followUp.assigned_to.replace(/'/g, "''")}'` : 'NULL'}
+              ${followUp.assigned_to ? `'${followUp.assigned_to.replace(/'/g, "''")}'` : 'NULL'},
+              ${followUp.owner_id || 'NULL'}
             )
           `);
         }

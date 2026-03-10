@@ -114,7 +114,7 @@ export default function AccountDetailPage({
     user_id: "",
   });
 
-  const [followUps, setFollowUps] = useState<{description: string; due_date: string; assigned_to: string}[]>([]);
+  const [followUps, setFollowUps] = useState<{description: string; due_date: string; assigned_to: string; owner_id: string}[]>([]);
 
   const [newUseCase, setNewUseCase] = useState({
     title: "",
@@ -276,7 +276,7 @@ export default function AccountDetailPage({
   };
 
   const addFollowUp = () => {
-    setFollowUps([...followUps, { description: "", due_date: "", assigned_to: "" }]);
+    setFollowUps([...followUps, { description: "", due_date: "", assigned_to: "", owner_id: "" }]);
   };
 
   const updateFollowUp = (index: number, field: string, value: string) => {
@@ -399,7 +399,7 @@ export default function AccountDetailPage({
                       <p className="text-sm">{item.DESCRIPTION}</p>
                       <div className="flex gap-3 text-xs text-muted-foreground">
                         {item.DUE_DATE && <span>Due: {formatDate(item.DUE_DATE)}</span>}
-                        {item.ASSIGNED_TO && <span>Assigned: {item.ASSIGNED_TO}</span>}
+                        {item.OWNER_NAME && <span>Owner: {item.OWNER_NAME}</span>}
                       </div>
                     </div>
                   </div>
@@ -489,7 +489,7 @@ export default function AccountDetailPage({
                           <Plus className="h-3 w-3 mr-1" /> Add
                         </Button>
                       </div>
-                      {followUps.map((followUp, index) => (
+                        {followUps.map((followUp, index) => (
                         <div key={index} className="p-3 bg-gray-50 rounded-lg mb-2 space-y-2">
                           <div className="flex justify-between">
                             <Label className="text-xs">Action Item {index + 1}</Label>
@@ -500,7 +500,12 @@ export default function AccountDetailPage({
                           <Input placeholder="Description" value={followUp.description} onChange={(e) => updateFollowUp(index, "description", e.target.value)} />
                           <div className="grid grid-cols-2 gap-2">
                             <Input type="date" placeholder="Due date" value={followUp.due_date} onChange={(e) => updateFollowUp(index, "due_date", e.target.value)} />
-                            <Input placeholder="Assigned to" value={followUp.assigned_to} onChange={(e) => updateFollowUp(index, "assigned_to", e.target.value)} />
+                            <Select value={followUp.owner_id} onValueChange={(v) => updateFollowUp(index, "owner_id", v || "")}>
+                              <SelectTrigger><SelectValue placeholder="Owner" /></SelectTrigger>
+                              <SelectContent>
+                                {users.map((user) => (<SelectItem key={user.ID} value={String(user.ID)}>{user.NAME}</SelectItem>))}
+                              </SelectContent>
+                            </Select>
                           </div>
                         </div>
                       ))}

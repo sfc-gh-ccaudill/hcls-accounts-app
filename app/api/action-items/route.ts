@@ -8,6 +8,7 @@ export interface ActionItem {
   DESCRIPTION: string;
   DUE_DATE: string | null;
   ASSIGNED_TO: string | null;
+  OWNER_ID: number | null;
   COMPLETED: boolean;
   COMPLETED_BY: string | null;
   COMPLETED_AT: string | null;
@@ -19,11 +20,11 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const accountId = searchParams.get("account_id");
     
-    let sql = `SELECT * FROM HCLS_ACCOUNTS.PUBLIC.ACTION_ITEMS`;
+    let sql = `SELECT a.*, u.NAME as OWNER_NAME FROM HCLS_ACCOUNTS.PUBLIC.ACTION_ITEMS a LEFT JOIN HCLS_ACCOUNTS.PUBLIC.USERS u ON a.OWNER_ID = u.ID`;
     if (accountId) {
-      sql += ` WHERE ACCOUNT_ID = ${accountId}`;
+      sql += ` WHERE a.ACCOUNT_ID = ${accountId}`;
     }
-    sql += ` ORDER BY COMPLETED ASC, DUE_DATE ASC NULLS LAST, CREATED_AT DESC`;
+    sql += ` ORDER BY a.COMPLETED ASC, a.DUE_DATE ASC NULLS LAST, a.CREATED_AT DESC`;
     
     const items = await query<ActionItem>(sql);
     return NextResponse.json(items);
@@ -36,16 +37,17 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { account_id, event_id, description, due_date, assigned_to } = body;
+    const { account_id, event_id, description, due_date, assigned_to, owner_id } = body;
     
     await query(`
-      INSERT INTO HCLS_ACCOUNTS.PUBLIC.ACTION_ITEMS (ACCOUNT_ID, EVENT_ID, DESCRIPTION, DUE_DATE, ASSIGNED_TO)
+      INSERT INTO HCLS_ACCOUNTS.PUBLIC.ACTION_ITEMS (ACCOUNT_ID, EVENT_ID, DESCRIPTION, DUE_DATE, ASSIGNED_TO, OWNER_ID)
       VALUES (
         ${account_id},
         ${event_id || 'NULL'},
         '${description.replace(/'/g, "''")}',
         ${due_date ? `'${due_date}'` : 'NULL'},
-        ${assigned_to ? `'${assigned_to.replace(/'/g, "''")}'` : 'NULL'}
+        ${assigned_to ? `'${assigned_to.replace(/'/g, "''")}'` : 'NULL'},
+        ${owner_id || 'NULL'}
       )
     `);
     

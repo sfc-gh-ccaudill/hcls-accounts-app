@@ -57,6 +57,7 @@ jobs:
           role = "HCLS_DEPLOY_ROLE"
           warehouse = "COMPUTE_WH"
           EOF
+          chmod 0600 ~/.snowflake/config.toml
 
       - name: Update SPCS Service
         run: |

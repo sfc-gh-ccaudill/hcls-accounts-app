@@ -1,5 +1,7 @@
 import snowflake from "snowflake-sdk";
 import fs from "fs";
+import path from "path";
+import { execSync } from "child_process";
 
 snowflake.configure({ logLevel: "ERROR" });
 
@@ -13,20 +15,76 @@ function getOAuthToken(): string | null {
       return fs.readFileSync(tokenPath, "utf8");
     }
   } catch {
-    // Not in SPCS environment
   }
   return null;
+}
+
+function parseTomlConnection(connectionName: string): Record<string, string> | null {
+  const tomlPath = path.join(process.env.HOME || "", ".snowflake", "config.toml");
+  try {
+    if (!fs.existsSync(tomlPath)) return null;
+    const content = fs.readFileSync(tomlPath, "utf8");
+    const lines = content.split("\n");
+    let inSection = false;
+    const config: Record<string, string> = {};
+    const sectionName = `connections.${connectionName}`.toLowerCase();
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+        const section = trimmed.slice(1, -1).toLowerCase();
+        inSection = section === sectionName;
+        continue;
+      }
+      if (inSection && trimmed && !trimmed.startsWith("#")) {
+        const eqIndex = trimmed.indexOf("=");
+        if (eqIndex > 0) {
+          const key = trimmed.slice(0, eqIndex).trim();
+          let value = trimmed.slice(eqIndex + 1).trim();
+          if ((value.startsWith('"') && value.endsWith('"')) || 
+              (value.startsWith("'") && value.endsWith("'"))) {
+            value = value.slice(1, -1);
+          }
+          config[key] = value;
+        }
+      }
+    }
+    return Object.keys(config).length > 0 ? config : null;
+  } catch {
+    return null;
+  }
 }
 
 function getConfig(): snowflake.ConnectionOptions {
   const connectionName = process.env.SNOWFLAKE_CONNECTION_NAME;
   
   if (connectionName) {
-    return {
-      connection_name: connectionName,
-      database: process.env.SNOWFLAKE_DATABASE || "HCLS_ACCOUNTS",
-      schema: process.env.SNOWFLAKE_SCHEMA || "PUBLIC",
-    } as unknown as snowflake.ConnectionOptions;
+    const tomlConfig = parseTomlConnection(connectionName);
+    if (tomlConfig) {
+      const config: Record<string, unknown> = {
+        account: tomlConfig.account || tomlConfig.accountname,
+        username: tomlConfig.user || tomlConfig.username,
+        warehouse: tomlConfig.warehouse,
+        database: process.env.SNOWFLAKE_DATABASE || "HCLS_ACCOUNTS",
+        schema: process.env.SNOWFLAKE_SCHEMA || "PUBLIC",
+        role: tomlConfig.role,
+      };
+
+      if (tomlConfig.authenticator?.toUpperCase() === "SNOWFLAKE_JWT" && tomlConfig.private_key_file) {
+        let keyPath = tomlConfig.private_key_file;
+        if (keyPath.startsWith("~")) {
+          keyPath = path.join(process.env.HOME || "", keyPath.slice(1));
+        }
+        config.authenticator = "SNOWFLAKE_JWT";
+        config.privateKey = fs.readFileSync(keyPath, "utf8");
+      } else if (tomlConfig.authenticator?.toUpperCase() === "EXTERNALBROWSER") {
+        config.authenticator = "EXTERNALBROWSER";
+      } else if (tomlConfig.password) {
+        config.password = tomlConfig.password;
+      }
+
+      return config as snowflake.ConnectionOptions;
+    }
   }
 
   const base = {
@@ -64,6 +122,7 @@ async function getConnection(): Promise<snowflake.Connection> {
   if (connection) {
     console.log("Token changed, reconnecting");
     connection.destroy(() => {});
+    connection = null;
   }
 
   if (connectionName) {
@@ -74,8 +133,25 @@ async function getConnection(): Promise<snowflake.Connection> {
     console.log("Connecting with external browser auth");
   }
   
-  const conn = snowflake.createConnection(getConfig());
-  await conn.connectAsync(() => {});
+  const config = getConfig();
+  const conn = snowflake.createConnection(config);
+  
+  console.log("Config authenticator:", config.authenticator);
+  
+  const useAsync = config.authenticator === "EXTERNALBROWSER" || 
+                   config.authenticator === "OKTA";
+  
+  if (useAsync) {
+    await conn.connectAsync(() => {});
+  } else {
+    await new Promise<void>((resolve, reject) => {
+      conn.connect((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+  
   connection = conn;
   cachedToken = token;
   return connection;
